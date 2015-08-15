@@ -103,6 +103,9 @@ public class Analyze {
 
 				ArrayList<Game> filteredGames = new ArrayList<Game>();
 
+				if (keepGoing == false)
+					break;
+
 				while (true) {
 					System.out.print("What color do you want to be? white/black: ");
 					String color = reader.nextLine();
@@ -114,45 +117,70 @@ public class Analyze {
 						filteredGames = blackGames;
 						break;
 					}
-					else if (color.equals("quit")) {
-						keepGoing = false;
-						break;
-					}
-					else
+					else {
 						System.out.println("Input not recognized.  Please try again.");
+					}
 				}
-		
-				if (keepGoing == false)
-					break;
 
 				while (true) {
 					System.out.print("---------\nInput command: ");
 					String command = reader.nextLine();
 				
-					String tokens[] = command.split(" ");
+					String tokens[] = command.split(" ");  // Might be worth just moving this to regex
 
-					// Should check for non-emptiness
-
-					if (tokens[0].equals("start")) {
-						break; // Pops out of this loop and goes to new search at top of outer loop
-					}
-					else if (tokens[0].equals("move")) {
-						Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]);  // Why is this commented?
-					}
-					else if (tokens[0].equals("range")) {
-						if (tokens[1].equals("elo"))
-							filteredGames = rangeElo(filteredGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
-						else if (tokens[1].equals("opelo"))
-							filteredGames = rangeOpElo(filteredGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
-						else if (tokens[1].equals("date")) {
-							SimpleDateFormat sdf = Game.getSdf();
-							Date low = sdf.parse(tokens[2]);
-							Date high = sdf.parse(tokens[3]);
-							filteredGames = rangeDate(filteredGames, low, high);
+					try {
+						if (tokens[0].equals("end")) {
+							break; // Pops out of this loop and goes to new search at top of outer loop
+						}
+						else if (tokens[0].equals("quit")) {
+							keepGoing = false;
+							break;
+						}
+						else if (tokens[0].equals("move")) {
+							Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]); 
+						}
+						else if (tokens[0].equals("range")) {
+							if (tokens[1].equals("elo")) {
+								filteredGames = rangeElo(filteredGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+							}
+							else if (tokens[1].equals("opelo")) {
+								filteredGames = rangeOpElo(filteredGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+							}
+							else if (tokens[1].equals("date")) {
+								SimpleDateFormat sdf = Game.getSdf();
+								Date low = sdf.parse(tokens[2]);
+								Date high = sdf.parse(tokens[3]);
+								filteredGames = rangeDate(filteredGames, low, high);
+							}
+							else {
+								System.out.println("Failed to parse range command");
+							}
+						}
+						else if (tokens[0].equals("filter")) {
+							if (tokens[1].equals("opponent")) {
+								filteredGames = filterOp(filteredGames, tokens[2]);
+							}
+							else if (tokens[1].equals("time")) {
+								filteredGames = filterTimeControl(filteredGames, tokens[2]);
+							}
+							else {
+								System.out.println("Failed to parse filter command");
+							}
+						}
+						else {
+							System.out.println("Command not recognized, please try again");
+							continue;
 						}
 					}
-					else if (tokens[0].equals("filter")) {
-						break;
+					catch (Exception e) {
+						e.printStackTrace();
+						System.out.println("Command failed to parse, please try again");
+						continue;
+					}
+
+					if (filteredGames == null) {
+						System.out.println("No games found!");
+						continue;
 					}
 
 					filteredGames = findGamesMatchingBoard(filteredGames, board, positionFreqs.get(Zobrist.makeHash(board)));  // Gets the current amount of frequencies// Need to be keeping track the frequencies of this frikkin board too
@@ -170,9 +198,9 @@ public class Analyze {
 		// Really need to do something that automatically wraps around ^^
 		System.out.println("Check allows you to easily search and filter through your games");
 		System.out.println("List of commands (do not include colon):");
-		System.out.println("start: start a new line of study (old one is erased!)\n");
+		System.out.println("end: finish line of study and start a new line of study (old one is erased!)\n");
 		System.out.println("range variable low high: filters a number in a range.  E.g. \"filter elo 1000 1200\"\n\treturns all games where your elo was between 1000 and 1200.  variable can be elo,\n\topelo (opponent's elo), or date.  Date must be specified in yyyy.mm.dd format.\n");
-		System.out.println("filter variable value: filters for occurences of variable having a value.  E.g. \"filter time blitz\"\n\tgives all blitz games.Full range of options of variable are: opponent (value is\n\tthen the name), time (value is then bullet, blitz, standard, or turn)\n");   
+		System.out.println("filter variable value: filters for occurences of variable having a value.  E.g. \"filter time blitz\"\n\tgives all blitz games.Full range of options of variable are: opponent (value is\n\tthen the name), time (value is then bullet, blitz, standard)\n");   
 		System.out.println("move value: makes a move in the current position given a valid algebraic move as\n\tthe value.  E.g. \"move Nxf3\".  Checks and such need not be specified.\n");
 		System.out.println("undo move: undoes the prior move\n");
 		System.out.println("quit: exits the program\n");
@@ -252,11 +280,26 @@ public class Analyze {
 		return matchingGames;
 	}
 
-	private static ArrayList<Game> filterTimeControl(ArrayList<Game> games, Game.TimeControl timeControl) {
+	private static ArrayList<Game> filterTimeControl(ArrayList<Game> games, String timeControl) {
+		Game.TimeControl numericTimeControl;
+		if (timeControl.equals("bullet")) {
+			numericTimeControl = Game.TimeControl.BULLET;
+		}
+		else if (timeControl.equals("blitz")) {
+			numericTimeControl = Game.TimeControl.BLITZ;
+		}
+		else if (timeControl.equals("standard")) {
+			numericTimeControl = Game.TimeControl.STANDARD;
+		}
+		else {
+			System.out.println("Invalid time control, please try again");
+			return null;
+		}
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (game.getTimeControl() == timeControl)
+			if (game.getTimeControl() == numericTimeControl) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -265,8 +308,9 @@ public class Analyze {
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
 			long gameDate = game.getDate().getTime();
-			if (start.getTime() <= gameDate && gameDate <= end.getTime())
+			if (start.getTime() <= gameDate && gameDate <= end.getTime()) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;		
 	}
