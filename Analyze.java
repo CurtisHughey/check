@@ -9,12 +9,19 @@ public class Analyze {
 	public static void main(String args[]) {
 
 		if (args.length > 0) {
-			if (args[0].equals("-L")) {  // Only load
-				PGNParser.writeGames();
+			if (args[0].equals("-L")) {  // Overwrite
+				PGNParser.writeGames(false);
 				return;
 			}
-			if (args[0].equals("-l"))
-				PGNParser.writeGames();  // Load and run
+			if (args[0].equals("-l")) {
+				PGNParser.writeGames(true);  // append
+				return;
+			}
+			else {  // Overwrite and run, will develop more
+				PGNParser.writeGames(false);
+			}
+			// I should do something that deletes the pgn files after, they aren't useful
+
 		}
 				
 

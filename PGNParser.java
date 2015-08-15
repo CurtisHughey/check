@@ -19,7 +19,7 @@ public class PGNParser {
 	(For reference.  Chose to go to an 0x88 representation)
 	*/
 
-	public static void writeGames() {
+	public static void writeGames(boolean append) {
 
 		try {
 			String inputPath = Paths.get(".").toAbsolutePath().normalize().toString()+"/pgn_data/";
@@ -31,7 +31,7 @@ public class PGNParser {
 			long gameCounter = 0;
 			int fileCounter = 0;
 
-			BufferedWriter out = new BufferedWriter(new FileWriter(outputFileName));
+			BufferedWriter out = new BufferedWriter(new FileWriter(outputFileName, append));
 
 			for (File file : files) {
 				String data = "";

@@ -112,14 +112,18 @@ class Game {
 		}
 
 		// TODO add more options (i.e. all) ^^^, see http://www.chess.com/forum/view/general/standard-blitz-and-bullet
-		if (timeControl.equals("1|0") || timeControl.equals("1|3") || timeControl.equals("2|1")) {
+		String times[] = timeControl.split("\\|");
+		int minutes = Integer.parseInt(times[0]);
+		int seconds = Integer.parseInt(times[1]);
+		double minuteEstimate = minutes + (seconds*40)/60;
+		if (minuteEstimate < 3) {
 			this.timeControl = TimeControl.BULLET;
 		}
-		else if (timeControl.equals("3|0") || timeControl.equals("3|2") || timeControl.equals("5|0") || timeControl.equals("10|10")) {
-			this.timeControl = TimeControl.BLITZ;
+		else if (minuteEstimate >= 15) {
+			this.timeControl = TimeControl.STANDARD;
 		}
 		else {
-			this.timeControl = TimeControl.STANDARD;
+			this.timeControl = TimeControl.BLITZ;
 		}
 
 		String game_regex = "[0-9]+\\.(O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?) (O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?)";
