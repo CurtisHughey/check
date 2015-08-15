@@ -47,17 +47,17 @@ public class Analyze {
 
 					String hashData[] = game_matcher.group(10).split("\\|");
 
-					ArrayList<HashedPosition> hashes = new ArrayList<HashedPosition>();
+					ArrayList<CompressedPosition> compressedPositions = new ArrayList<CompressedPosition>();
 					for (String hashDatum : hashData) {
 						String hashAndFreq[] = hashDatum.split(",");
-						hashes.add(new HashedPosition(Long.parseLong(hashAndFreq[0]), Integer.parseInt(hashAndFreq[1])));
+						compressedPositions.add(new CompressedPosition(Long.parseLong(hashAndFreq[0]), Integer.parseInt(hashAndFreq[1])));
 					}
 					
 					Game game = new Game(user, op, Integer.parseInt(elo), Integer.parseInt(opElo), date,
 								Integer.parseInt(color), Integer.parseInt(timeControl), Integer.parseInt(result),
-								moves, hashes);
+								moves, compressedPositions);
 					
-					if (game.color == Game.Color.WHITE)					
+					if (game.getColor() == Game.Color.WHITE)					
 						whiteGames.add(game);
 					else
 						blackGames.add(game);
@@ -89,8 +89,8 @@ public class Analyze {
 				int board[] = startBoard;
 				long hash = startHash;
 		
-				ArrayList<HashedPosition> positions = new ArrayList<HashedPosition>();
-				positions.add(new HashedPosition(startHash, 1));
+				ArrayList<CompressedPosition> compressedPositions = new ArrayList<CompressedPosition>();
+				compressedPositions.add(new CompressedPosition(startHash, 1));
 				HashMap<Long,Integer> positionFreqs = new HashMap<Long,Integer>();
 				positionFreqs.put(startHash, 1);				
 
@@ -130,7 +130,7 @@ public class Analyze {
 						break; // Pops out of this loop and goes to new search at top of outer loop
 					}
 					else if (tokens[0].equals("move")) {
-						Game.makeMove(board, positions, positionFreqs, tokens[1]);  // Why is this commented?
+						Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]);  // Why is this commented?
 					}
 					else if (tokens[0].equals("range")) {
 						if (tokens[1].equals("elo"))
@@ -138,8 +138,9 @@ public class Analyze {
 						else if (tokens[1].equals("opelo"))
 							filteredGames = rangeOpElo(filteredGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
 						else if (tokens[1].equals("date")) {
-							Date low = Game.sdf.parse(tokens[2]);
-							Date high = Game.sdf.parse(tokens[3]);
+							SimpleDateFormat sdf = Game.getSdf();
+							Date low = sdf.parse(tokens[2]);
+							Date high = sdf.parse(tokens[3]);
 							filteredGames = rangeDate(filteredGames, low, high);
 						}
 					}
@@ -174,23 +175,19 @@ public class Analyze {
 	// Honestly, move all of these filtering functions into a container for games, to enable easy chaining
 
 	private static ArrayList<Game> findGamesMatchingBoard(ArrayList<Game> games, int[] board, Integer freq) {
-		return findGamesMatchingHashedPosition(games, Zobrist.makeHash(board), freq);  // This will need to get updated if I want to not have to take care of repeated positions in makeHash
+		return findGamesMatchingCompressedPosition(games, Zobrist.makeHash(board), freq);  // This will need to get updated if I want to not have to take care of repeated positions in makeHash
 	}
 
-	private static ArrayList<Game> findGamesMatchingHashedPosition(ArrayList<Game> games, long hash, Integer freq) {
-		if (freq == null)
+	private static ArrayList<Game> findGamesMatchingCompressedPosition(ArrayList<Game> games, long hash, Integer freq) {
+		if (freq == null) {
 			return null;
+		}
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
-		HashedPosition hashedPosition = new HashedPosition(hash, freq);
+		CompressedPosition CompressedPosition = new CompressedPosition(hash, freq);
 		for (Game game : games) {
-			if (game.positions.contains(hashedPosition))  // Do a 
+			if (game.compressedPositions.contains(CompressedPosition))  { // Possible that since I overrode equals I should also override hash?
 				matchingGames.add(game);
-			/*			for (HashedPosition position : game.positions) { // Do a hashed lookup
-				if (position == hashedPosition) {
-					matchingGames.add(game);
-					break;
-				}
-			}*/
+			}
 		}
 		return matchingGames;
 	}
@@ -199,8 +196,9 @@ public class Analyze {
 	private static ArrayList<Game> filterResult(ArrayList<Game> games, Game.Result result) {  // Add Won and Drawn, etc. ^^
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (game.result == result)
+			if (game.getResult() == result) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -208,8 +206,9 @@ public class Analyze {
 	private static ArrayList<Game> filterOp(ArrayList<Game> games, String op) {  // Filters by the opponent
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (game.opponent.equals(op))
+			if (game.getOp().equals(op)) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -217,8 +216,9 @@ public class Analyze {
 	private static ArrayList<Game> filterColor(ArrayList<Game> games, Game.Color color) {  // Filters by the color of the user
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (game.color == color)
+			if (game.getColor() == color) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -226,8 +226,10 @@ public class Analyze {
 	private static ArrayList<Game> rangeElo(ArrayList<Game> games, int low, int high) {  // Filters by the ELO range of the user
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (low <= game.elo && game.elo <= high)
+			int elo = game.getElo();
+			if (low <= elo && elo <= high) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -235,8 +237,10 @@ public class Analyze {
 	private static ArrayList<Game> rangeOpElo(ArrayList<Game> games, int low, int high) {  // Filters by the ELO range of the user
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (low <= game.opElo && game.opElo <= high)
+			int opElo = game.getOpElo();
+			if (low <= opElo && opElo <= high) {
 				matchingGames.add(game);
+			}
 		}
 		return matchingGames;
 	}
@@ -244,7 +248,7 @@ public class Analyze {
 	private static ArrayList<Game> filterTimeControl(ArrayList<Game> games, Game.TimeControl timeControl) {
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			if (game.timeControl == timeControl)
+			if (game.getTimeControl() == timeControl)
 				matchingGames.add(game);
 		}
 		return matchingGames;
@@ -253,7 +257,7 @@ public class Analyze {
 	private static ArrayList<Game> rangeDate(ArrayList<Game> games, Date start, Date end) { // Change int to JODA/Datetime
 		ArrayList<Game> matchingGames = new ArrayList<Game>();
 		for (Game game : games) {
-			long gameDate = game.date.getTime();
+			long gameDate = game.getDate().getTime();
 			if (start.getTime() <= gameDate && gameDate <= end.getTime())
 				matchingGames.add(game);
 		}
@@ -269,7 +273,7 @@ public class Analyze {
 		int totalGames = games.size();  // should I just increment in the loop below? ^^.  Check if null ^^^
 
 		for (Game game : games) {
-			switch (game.result) {
+			switch (game.getResult()) {
 				case WIN:
 					wins++;
 					break;

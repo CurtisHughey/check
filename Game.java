@@ -9,11 +9,9 @@ import java.util.HashMap;
 
 class Game {
 
-	enum Color {WHITE, BLACK};  // The color that the user was
-	enum Result {WIN, DRAW, LOSS};
-	enum TimeControl {BULLET, BLITZ, STANDARD, TURN, OTHER};
-
-	//private static final int maxAllowedRepetitions = 5;  // The number number of times a repeating position is recorded ^^
+	public enum Color {WHITE, BLACK};
+	public enum Result {WIN, DRAW, LOSS};
+	public enum TimeControl {BULLET, BLITZ, STANDARD, TURN, OTHER};
 
 	private static int knightMoveGenerator[] = {18,33,31,14,-18,-33,-31,-14};
 	private static int bishopMoveGenerator[] = {17,15,-17,-15};
@@ -21,25 +19,24 @@ class Game {
 	private static int queenMoveGenerator[]  = {1,17,16,15,-1,-17,-16,-15};
 	private static int kingMoveGenerator[]   ={1,17,16,15,-1,-17,-16,-15};
 	
-	public static SimpleDateFormat sdf;
-
-	String user;  // The user name 
-	String opponent;
-	Date date;
-	Color color; // The user's color
-	Result result;
-	int elo;
-	int opElo;
-	TimeControl timeControl;
-	ArrayList<String> moves;
-	ArrayList<HashedPosition> positions; // The hashed positions of the game.  Might not go all the way to the end...
+	private final static SimpleDateFormat sdf;
+	private String user;  // The user name 
+	private String op;
+	private Date date;
+	private Color color; // The user's color
+	private Result result;
+	private int elo;
+	private int opElo;
+	private TimeControl timeControl;
+	public ArrayList<String> moves;
+	public ArrayList<CompressedPosition> compressedPositions; //'m making these last two public for the moment since they get changed much, but might not matter since could be inlined
 
 	static {
-		sdf = new SimpleDateFormat("yyyy.MM.dd");  // Is this the best way ^^?
+		sdf = new SimpleDateFormat("yyyy.MM.dd");
 	}
 
 	Game(String user,
-		 String opponent,
+		 String op,
 		 int elo,
 		 int opElo,
 		 String date,	
@@ -47,10 +44,10 @@ class Game {
 		 int timeControl,
 		 int result,
 		 ArrayList<String> moves,
-		 ArrayList<HashedPosition> positions) {
+		 ArrayList<CompressedPosition> compressedPositions) {
 		
 		this.user = user;
-		this.opponent = opponent;
+		this.op = op;
 		this.elo = elo;
 		this.opElo = opElo;
 		try {
@@ -59,10 +56,12 @@ class Game {
 		catch (Exception e) {
 			e.printStackTrace();
 		}
-		switch (color) {  // Breaking the fourth wall a bit here ^^^, check serializable stuff
+		assert 0 <= color && color <= 1 : "Color: "+color+" is out of range";
+		switch (color) {  // Breaking the fourth wall a bit here, check serializable stuff
 			case 0: this.color = Color.WHITE; break;
 			case 1: this.color = Color.BLACK; break;
 		}
+		assert 0 <= timeControl && timeControl <= 4 : "TimeControl: "+timeControl+" is out of range";
 		switch (timeControl) {
 			case 0: this.timeControl = TimeControl.BULLET; break;
 			case 1: this.timeControl = TimeControl.BLITZ; break;
@@ -70,13 +69,14 @@ class Game {
 			case 3: this.timeControl = TimeControl.TURN; break;
 			case 4: this.timeControl = TimeControl.OTHER; break;
 		}
+		assert 0 <= result && result <= 2 : "Result: "+result+" is out of range";
 		switch (result) {
 			case 0: this.result = Result.WIN; break;
 			case 1: this.result = Result.DRAW; break;
 			case 2: this.result = Result.LOSS; break;
 		}
 		this.moves = moves;
-		this.positions = positions;
+		this.compressedPositions = compressedPositions;
 	}
 		 
 
@@ -100,26 +100,29 @@ class Game {
 
 		if (user.equals(whiteColor)) {
 			this.color = Color.WHITE;
-			this.opponent = blackColor;
+			this.op = blackColor;
 			this.elo = Integer.parseInt(whiteElo);
 			this.opElo = Integer.parseInt(blackElo);
 		}
 		else {
 			this.color = Color.BLACK;
-			this.opponent = whiteColor;
+			this.op = whiteColor;
 			this.elo = Integer.parseInt(blackElo);
 			this.opElo = Integer.parseInt(whiteElo);
 		}
 
-		// Add turn.  Also, this could be way better ^^^
-		if (timeControl.equals("1|0") || timeControl.equals("1|3") || timeControl.equals("2|1"))
+		// TODO add more options (i.e. all) ^^^, see http://www.chess.com/forum/view/general/standard-blitz-and-bullet
+		if (timeControl.equals("1|0") || timeControl.equals("1|3") || timeControl.equals("2|1")) {
 			this.timeControl = TimeControl.BULLET;
-		else if (timeControl.equals("3|0") || timeControl.equals("3|2") || timeControl.equals("5|0") || timeControl.equals("10|10"))
+		}
+		else if (timeControl.equals("3|0") || timeControl.equals("3|2") || timeControl.equals("5|0") || timeControl.equals("10|10")) {
 			this.timeControl = TimeControl.BLITZ;
-		else
+		}
+		else {
 			this.timeControl = TimeControl.STANDARD;
+		}
 
-		String game_regex = "[0-9]+\\.(O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?) (O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?)";  // Sort of kind of lazy^^
+		String game_regex = "[0-9]+\\.(O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?) (O-O-O|O-O|[a-zA-Z1-8=]+)([#\\+]?)";
 		Pattern game_pattern = Pattern.compile(game_regex);
 		Matcher game_matcher = game_pattern.matcher(moveString);
 		moves = new ArrayList<String>();
@@ -128,27 +131,31 @@ class Game {
 			moves.add(game_matcher.group(1));
 
 			String second = game_matcher.group(3); 
-			if (!(second.equals("1") || second.equals("0") || second.equals("1/2")))  // Then game is not finished, hacky ^^
+			if (!(second.equals("1") || second.equals("0") || second.equals("1/2"))) {
 				moves.add(game_matcher.group(3));
+			}
 		}
 
-		String result_regex = "(1-0|0-1|1/2-1/2)"; //Technically can have 1/2-0
+		String result_regex = "(1-0|0-1|1/2-1/2)";
 		Pattern result_pattern = Pattern.compile(result_regex);
 		Matcher result_matcher = result_pattern.matcher(moveString);
 		String resultString = "";
 
 		if (result_matcher.find()) {
-			resultString = result_matcher.group(1);  // Overwriting the "x won by y".  I should be recording failures^^
-			if (resultString.equals("1-0"))
+			resultString = result_matcher.group(1);
+			if (resultString.equals("1-0")) {
 				this.result = color==Color.WHITE ? Result.WIN : Result.LOSS;
-			else if (resultString.equals("0-1"))
+			}
+			else if (resultString.equals("0-1")) {
 				this.result = color==Color.WHITE ? Result.LOSS : Result.WIN;
-			else
+			}
+			else {
 				this.result = Result.DRAW;
+			}
 		}
 
 		// Now the hashing stuff
-		positions = new ArrayList<HashedPosition>();
+		compressedPositions = new ArrayList<CompressedPosition>();
 		HashMap<Long, Integer> positionFreqs = new HashMap<Long, Integer>();  // Points positions (longs) to number of occurences (ints)
 
 		int board[] =  {4,2,3,5,6,3,2,4,0,0,0,0,0,0,0,0, // board[8] = turn, board[9] = how many times the position has been repeated
@@ -158,24 +165,20 @@ class Game {
 						0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 						0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 						7,7,7,7,7,7,7,7,0,0,0,0,0,0,0,0,
-						10,8,9,11,12,9,8,10};  // Drop the last 8 zeros, don't need
+						10,8,9,11,12,9,8,10};
 
 		long hash = Zobrist.makeHash(board);
-		positions.add(new HashedPosition(hash, 1));
+		compressedPositions.add(new CompressedPosition(hash, 1));
 		positionFreqs.put(hash, 1);
 
 		//Potentially, checking for draws by repetition might be unnecessary, since if I only look in the first 15 or so moves it is highly unlikely that that would be present
 
 		for (String move : moves) {
-			makeMove(board, positions, positionFreqs, move);
+			makeMove(board, compressedPositions, positionFreqs, move);
 						
 			////
 			long tempHash = Zobrist.makeHash(board);
-			if (positions.get(positions.size()-1).hash != tempHash) {  // Keeping this in for the moment ^^
-				System.out.println("NOT EQUAL!!!!!!!!!!!!!!!!!!!!!!!!");
-				System.out.println(move);				
-			}
-			////
+			assert compressedPositions.get(compressedPositions.size()-1).getHash() != tempHash : "Hashes were not equal for move: "+move+" in game: "+this;
 		}
 		
 	}
@@ -217,23 +220,26 @@ class Game {
 
 			if (disambCol == ' ') { // Then it is not a capture
 				int position = destination+multiplier*(-16);
-				if (board[position] == pieceNum)
+				if (board[position] == pieceNum) {
 					return position;
+				}
 				position = destination+multiplier*(-32);
-				if (board[position] == pieceNum)
+				if (board[position] == pieceNum) {
 					return position;
+				}
 			}
 			else {
 				int position = destination+multiplier*(-17);
-				if (board[position] == pieceNum && getColumn(position) == disambCol)
+				if (board[position] == pieceNum && getCol(position) == disambCol) {
 					return position;
+				}
 				position = destination+multiplier*(-15);
-				if (board[position] == pieceNum && getColumn(position) == disambCol)
+				if (board[position] == pieceNum && getCol(position) == disambCol) {
 					return position;
+				}
 			}
 
-			System.out.println("Failed to figure out the pawn origin");
-			return -1;
+			assert false : "Couldn't find an origin square";
 		}
 
 		for (int i = 0; i < moveGenerator.length; i++) {
@@ -248,23 +254,24 @@ class Game {
 				boolean piecePresent = pieceNum > 0;
 				if (currentPieceNum > 0) {
 					if (pieceNum == currentPieceNum) {  
-						if ((disambCol == disambRow /*i.e. ' '*/) || (disambCol == getColumn(j)) || (disambRow == getRow(j)))  // Then we were looking at the right one
+						if ((disambCol == disambRow /*i.e. ' '*/) || (disambCol == getCol(j)) || (disambRow == getRow(j))) {  // Then we were looking at the right one
 							return j;
+						}
 					}
 					break; // Either it was a friendly piece (maybe in wrong place) or an enemy piece, either way we are stopped.  
 				}
 			} 
-			while (iterate);  // A devilishly sneaky way to do this, if I may say so myself.  Possible infinite loop? ^^
+			while (iterate);
 		}
-		System.out.println("Failed to find an origin square!!!");
-		return -1; // Maybe throw exception instead, write to log file, etc. ^^
+		assert false : "Couldn't find an origin square";
+		return -1;  // Never reaches here, just appeasing the compiler
 	}
 
-	private static int getBoardIndex(char col, char row) {  // Maybe error check?^^  But not really necessary since private, and only getting called by makeMove, which verifies regex
+	private static int getBoardIndex(char col, char row) {
 		return (col-'a')+(row-'1')*16;  
 	}
 
-	private static char getColumn(int i) {
+	private static char getCol(int i) {
 		return (char)('a'+i%8);
 	}
 
@@ -273,7 +280,7 @@ class Game {
 	}
 
 	// move = 0 if white, 1 if black
-	public static void makeMove(int board[], ArrayList<HashedPosition> positions, HashMap<Long, Integer> positionFreqs, String move) {  // Need to pass number of times past positions have occurred! ^^^^
+	public static void makeMove(int board[], ArrayList<CompressedPosition> compressedPositions, HashMap<Long, Integer> positionFreqs, String move) {
 
 		String pawn_regex = "(([a-h])?x?([a-h])([1-8])(=([RNBQ]))?)"; // For pawn moves
 		String other_regex = "(([RNBKQ])(([a-h])|([1-8]))?x?([a-h])([1-8]))"; // For other normal piece moves 
@@ -282,13 +289,13 @@ class Game {
 
 		String move_regex = "("+pawn_regex+"|"+other_regex+"|"+castle_regex+")"+append_regex;		
 
-		Pattern move_pattern = Pattern.compile(move_regex);	// Don't compile each time, make it static! ^^
+		Pattern move_pattern = Pattern.compile(move_regex);	// Don't compile each time, make it static! ^^^
 		Matcher move_matcher = move_pattern.matcher(move);
 				
 		char piece = ' ';
 		char disambCol = ' ';
 		char disambRow = ' ';
-		char column = ' ';  // Be consistent in column/col
+		char col = ' ';
 		char row = ' ';
 		char promotesTo = ' ';
 		boolean pawnMove = false;
@@ -298,7 +305,7 @@ class Game {
 		boolean queenCastle = false;
 
 		int turn = board[8];
-		long hash = positions.get(positions.size()-1).hash;  // Bit wonky, should really be called currentHash or something
+		long hash = compressedPositions.get(compressedPositions.size()-1).getHash();  // Bit wonky, should really be called currentHash or something
 
 		/*
 		0: move
@@ -325,7 +332,7 @@ class Game {
 			if (pawnMove = (move_matcher.group(2) != null)) {
 				piece = 'P';
 				disambCol = move_matcher.group(3) != null ? move_matcher.group(3).charAt(0) : ' ';
-				column = move_matcher.group(4).charAt(0);
+				col = move_matcher.group(4).charAt(0);
 				row = move_matcher.group(5).charAt(0);
 				promotesTo = move_matcher.group(7) != null ? move_matcher.group(7).charAt(0) : ' ';
 			}
@@ -335,15 +342,17 @@ class Game {
 					disambCol = move_matcher.group(11) != null ? move_matcher.group(11).charAt(0) : ' ';
 					disambRow = move_matcher.group(12) != null ? move_matcher.group(12).charAt(0) : ' ';
 				}
-				column = move_matcher.group(13).charAt(0);
+				col = move_matcher.group(13).charAt(0);
 				row = move_matcher.group(14).charAt(0);
 			}
 			else if (castleMove = (move_matcher.group(15) != null)) {
 				//piece = 'K'; // Used with the hashing to simplify
-				if (move_matcher.group(16) != null)  // Then it matched
+				if (move_matcher.group(16) != null) {  // Then it matched
 					queenCastle = true;
-				else
+				}
+				else {
 					queenCastle = false;
+				}
 				kingCastle = !queenCastle;  // Exactly 1 is true...
 			} 	
 		}
@@ -374,29 +383,8 @@ class Game {
 		}
 		else {  // Pawn or other move, can treat much of it the same
 			// First must find the origin square
-			int pieceNum = 0;
-			switch (piece) {  // Programming pearls would be ashamed, I should make this an array or something.
-				case 'P':
-					pieceNum = 1+turn*6;  // Shifts if black
-					break;
-				case 'N':
-					pieceNum = 2+turn*6;
-					break;
-				case 'B':
-					pieceNum = 3+turn*6;
-					break;
-				case 'R':
-					pieceNum = 4+turn*6;
-					break;
-				case 'Q':
-					pieceNum = 5+turn*6;
-					break;
-				case 'K':
-					pieceNum = 6+turn*6;
-					break;
-			}
-
-			int destination = getBoardIndex(column, row);
+			int pieceNum = pieceToNumPiece(piece, turn);
+			int destination = getBoardIndex(col, row);
 			int origin = findOrigin(board, piece, pieceNum, destination, disambCol, disambRow, turn);  // Could overload to pass either disambCol or disambRow or nothing..
 
 			board[origin] = 0;
@@ -404,10 +392,12 @@ class Game {
 
 			if (piece == 'P' && disambCol != ' ' && board[destination] == 0) {  // Then it is a capturing move but there is no piece at destination => ep
 				int captureLocation;
-				if (disambCol < column)  // Then captures to the right
+				if (disambCol < col) { // Then captures to the right
 					captureLocation = origin+1;
-				else
+				}
+				else {
 					captureLocation = origin-1;
+				}
 				hash ^= Zobrist.zobristTable[board[captureLocation]][captureLocation];
 				board[captureLocation] = 0;
 			}
@@ -416,8 +406,9 @@ class Game {
 			}
 
 			int destinationPiece = pieceNum;
-			if (promotesTo != ' ')
+			if (promotesTo != ' ') {
 				destinationPiece = pieceToNumPiece(promotesTo, turn);
+			}
 
 			board[destination] = destinationPiece;
 			hash ^= Zobrist.zobristTable[destinationPiece][destination];
@@ -427,32 +418,15 @@ class Game {
 		board[8] = turn==0 ? 1 : 0;  // Toggles
 		hash ^= Zobrist.zobristTable[0][8+board[8]]; // The special turn hashed position
 
-		// Now must xor the hash with the appropriate number of past positions.  Ugh
-
 		Integer freq = positionFreqs.get(hash);
 		if (freq != null) {
-			positions.add(new HashedPosition(hash, freq+1));
+			compressedPositions.add(new CompressedPosition(hash, freq+1));
 			positionFreqs.put(hash, freq+1);
 		}
 		else {
-			positions.add(new HashedPosition(hash, 1));
+			compressedPositions.add(new CompressedPosition(hash, 1));
 			positionFreqs.put(hash, 1);
 		}
-			
-
-		/*Integer freq = positionFreqs.get(hash);
-		int hashAt = 0;
-		if (freq != null) {
-			positionFreqs.put(hash, freq+1);
-			hashAt = 8+freq+1;
-		}
-		else {
-			positionFreqs.put(hash, 1);
-			hashAt = 10;  // Just repeated once
-		}
-		hash ^= Zobrist.zobristTable[0][hashAt]; // Oh God this sucks ^^^, check everything.  Don't bother removing recording 1, 2 repetitions, etc.*/
-
-		//return hash;
 	}
 
 	public static String boardToString(int[] board, long hash) {
@@ -500,16 +474,39 @@ class Game {
 		return pieceNum;
 	}
 
+	public static SimpleDateFormat getSdf() { return sdf; }
+
+	public String getUser() { return user; }
+	public String getOp() { return op; }
+	public Date getDate() { return date; }
+	public Color getColor() { return color; }
+	public Result getResult() { return result; }
+	public int getElo() { return elo; }
+	public int getOpElo() { return opElo; }
+	public TimeControl getTimeControl() { return timeControl; }
+	public ArrayList<String> getMoves() { return moves; }
+	public ArrayList<CompressedPosition> getCompressedPositions() { return compressedPositions; }
+
+	public void setUser(String user) { this.user = user; }
+	public void setOp(String op) { this.op = op; }
+	public void setDate(Date date) { this.date = date; }
+	public void setColor(Color color) { this.color = color; }
+	public void setResult(Result result) { this.result = result; }
+	public void setElo(int elo) { this.elo = elo; }
+	public void setOpElo(int opElo) { this.opElo = opElo; }
+	public void setTimeControl(TimeControl timeControl) { this.timeControl = timeControl; }
+	public void setMoves(ArrayList<String> moves) { this.moves = moves; }
+	public void setCompressedPositios(ArrayList<CompressedPosition> compressedPositions) { this.compressedPositions = compressedPositions; }
+
 	public String toString() {
 		String output = "";
 		output += "Player: "+user+", Elo: "+elo+"\n";
-		output += "Opponent: "+opponent+", Elo: "+opElo+"\n";
+		output += "Opponent: "+op+", Elo: "+opElo+"\n";
 		output += "Date: "+date+"\n";
 		output += "Color: "+color+"\n";
 		output += "Time Control: "+timeControl+"\n";
 		output += "Moves: "+moves+"\n";
 		output += "Result: "+result+"\n";
-		//output += "Hashes: "+positions;  // Taking out for the moment, makes it crowded
 		
 		return output;
 	}

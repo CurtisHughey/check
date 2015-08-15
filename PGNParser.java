@@ -5,8 +5,6 @@ import java.lang.*;
 
 import java.nio.file.Paths;
 
-// Safety engineer the crap out of all of this crap ^^^
-
 public class PGNParser {
 	/*
 	0x88=10001000
@@ -25,7 +23,7 @@ public class PGNParser {
 
 		try {
 			String inputPath = Paths.get(".").toAbsolutePath().normalize().toString()+"/pgn_data/";
-			String outputFileName = "data/database.txt";  // Make an appending option for certain input files ^^^
+			String outputFileName = "data/database.txt";  // TODO eventually do appending ^^^
 
 			File directory = new File(inputPath);
 			File files[] = directory.listFiles();
@@ -38,19 +36,21 @@ public class PGNParser {
 			for (File file : files) {
 				String data = "";
 				String line;
-				if (file.isFile() && file.getName().indexOf('~')==-1) {  // Is the ~ risky? ^^
+				if (file.isFile() && file.getName().indexOf('~')==-1) {
 					BufferedReader input = new BufferedReader(new FileReader(file.getCanonicalPath()));
 	
-					while ((line = input.readLine()) != null)
+					while ((line = input.readLine()) != null) {
 						data += line+"\n";
+					}
 			
 					input.close();
 
 					String elementNames[] = {"Event", "Site", "Date", "White", "Black", "Result", "WhiteElo", "BlackElo", "TimeControl", "Termination", "Moves"};  //Use this to abstract REGEX above
 
 					String pgn_regex = "";
-					for (int i = 0; i < elementNames.length-1; i++) // -1 to not include Match
+					for (int i = 0; i < elementNames.length-1; i++) { // -1 to not include Match
 						pgn_regex += ("\\["+elementNames[i]+" \"(.*)\"\\]\n");
+					}
 
 					pgn_regex += "\n"+"(([^\n]+\n)+)"+"\n"+"\n";  // Forming a complete entry of a pgn game
 					Pattern pgn_pattern = Pattern.compile(pgn_regex);		
@@ -69,21 +69,26 @@ public class PGNParser {
 						Game game = new Game("chughey", date, white, black, whiteElo, blackElo, timeControl, moveString);
 
 						String output = "";
-						output += "[P:"+game.user+"]";
-						output += "[O:"+game.opponent+"]";
-						output += "[E:"+game.elo+"]";
-						output += "[F:"+game.opElo+"]";
+						output += "[P:"+game.getUser()+"]";
+						output += "[O:"+game.getOp()+"]";
+						output += "[E:"+game.getElo()+"]";
+						output += "[F:"+game.getOpElo()+"]";
 						output += "[D:"+date+"]";  // Not bothering with a double conversion, format is fine
-						output += "[C:"+game.color.ordinal()+"]";
-						output += "[T:"+game.timeControl.ordinal()+"]";
-						output += "[R:"+game.result.ordinal()+"]";
+						output += "[C:"+game.getColor().ordinal()+"]";
+						output += "[T:"+game.getTimeControl().ordinal()+"]";
+						output += "[R:"+game.getResult().ordinal()+"]";
 						output += "[M:";  
-						for (String move : game.moves)
+
+						ArrayList<String> moves = game.getMoves();
+						for (String move : moves) {
 							output += move+",";
+						}
 						output+="]";
 						output += "[H:";  
-						for (HashedPosition position : game.positions)
-							output += position.hash+","+position.freq+"|";
+						ArrayList<CompressedPosition> compressedPositions = game.getCompressedPositions();
+						for (CompressedPosition compressedPosition : compressedPositions) {
+							output += compressedPosition.getHash()+","+compressedPosition.getFreq()+"|";
+						}
 						output+="]\n";
 	
 						out.write(output);
