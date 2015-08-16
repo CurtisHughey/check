@@ -38,7 +38,7 @@ public class Zobrist {
 			String line = "";
 			int i = 0;
 			while ((line = randomInput.readLine()) != null && i < numRandomNumbers) {
-				assert line.length() == 8 : "Random number: "+line+" is the wrong size!";
+				assert line.length() == 16 : "Random number: "+line+" is the wrong size!";
 				String nibble = line.substring(0,1);
 				long num = Long.parseLong(line.substring(1), 16);
 				long nibbleNum = Long.parseLong(nibble, 16) << 60;  // Repairing it.
