@@ -7,7 +7,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 
-class Game {
+public class Game {
 
 	public enum Color {WHITE, BLACK};
 	public enum Result {WIN, DRAW, LOSS};

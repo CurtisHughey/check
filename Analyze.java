@@ -8,6 +8,8 @@ import java.util.Date;
 public class Analyze {
 	public static void main(String args[]) {
 
+		System.out.println("hi");
+
 		if (args.length > 0) {
 			if (args[0].equals("-L")) {  // Overwrite
 				PGNParser.writeGames(false);
@@ -91,6 +93,8 @@ public class Analyze {
 			displayGuide();
 
 			boolean keepGoing = true;
+
+			ArrayList<MatchingGame> masterMatchingGames = new ArrayList<MatchingGame>();  //^^^^ need this to be integrated!
 
 			while (keepGoing) {
 				System.out.println("Starting search");

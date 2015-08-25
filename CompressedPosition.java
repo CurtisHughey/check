@@ -1,4 +1,4 @@
-class CompressedPosition {
+public class CompressedPosition {
 	private long hash; 
 	private int freq; // How many times it has occurred
 
