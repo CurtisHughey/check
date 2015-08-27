@@ -445,6 +445,7 @@ public class Game {
 		}
 		output = "Board: \n"+output;
 		output += "Hash: "+hash;
+		output += "\n\n";
 		return output;
 	}
 

@@ -97,31 +97,27 @@ public class Analyze {
 			ArrayList<MatchingGame> masterMatchingGames = new ArrayList<MatchingGame>();  //^^^^ need this to be integrated!
 
 			while (keepGoing) {
+
 				System.out.println("Starting search");
 
-				int board[] = startBoard;
-				long hash = startHash;
+				long hash = startHash;  //nec? ^^
 		
 				ArrayList<CompressedPosition> compressedPositions = new ArrayList<CompressedPosition>();
 				compressedPositions.add(new CompressedPosition(startHash, 1));
 				HashMap<Long,Integer> positionFreqs = new HashMap<Long,Integer>();
 				positionFreqs.put(startHash, 1);				
 
-				ArrayList<MatchingGame> matchingGames = new ArrayList<MatchingGame>();
-
-				if (keepGoing == false) {
-					break;
-				}
+				ArrayList<MatchingGame> allColorGames = new ArrayList<MatchingGame>();
 
 				while (true) {
 					System.out.print("What color do you want to be? white/black: ");
 					String color = reader.nextLine();
 					if (color.equals("white")) {
-						matchingGames = whiteGames;
+						allColorGames = whiteGames;
 						break;
 					}
 					else if (color.equals("black")) {
-						matchingGames = blackGames;
+						allColorGames = blackGames;
 						break;
 					}
 					else {
@@ -130,7 +126,13 @@ public class Analyze {
 				}
 
 				ArrayList<ArrayList<MatchingGame>> savedMatchingGamesLists = new ArrayList<ArrayList<MatchingGame>>();
-				savedMatchingGamesLists.add(matchingGames);
+				savedMatchingGamesLists.add(allColorGames);
+				ArrayList<int[]> savedBoards = new ArrayList<int[]>();  // Might have to be Long^^^
+				savedBoards.add(startBoard);  //startBoard or board makes more sense? ^^^
+
+				ArrayList<MatchingGame> matchingGames = new ArrayList<MatchingGame>();
+				matchingGames = allColorGames;
+				int board[] = startBoard;
 
 				boolean beforeSearch = true;
 
@@ -151,6 +153,7 @@ public class Analyze {
 						}
 						else if (tokens[0].equals("move")) {
 							Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]);
+							matchingGames = findGamesMatchingBoard(allColorGames, board, positionFreqs.get(Zobrist.makeHash(board)));
 						}
 						else if (tokens[0].equals("undo")) {
 							if (savedMatchingGamesLists.size() == 1) {
@@ -160,22 +163,24 @@ public class Analyze {
 							undo = true;
 							savedMatchingGamesLists.remove(savedMatchingGamesLists.size()-1);  // Deletes the last one
 							matchingGames = savedMatchingGamesLists.get(savedMatchingGamesLists.size()-1);  // Loads the previous one
+							savedBoards.remove(savedBoards.size()-1);
+							board = savedBoards.get(savedBoards.size()-1);
 						}
 						else if (tokens[0].equals("range")) {
 							if (!beforeSearch) {
 								System.out.println("You cannot execute a range command now!");
 							}
 							if (tokens[1].equals("elo")) {
-								matchingGames = rangeElo(matchingGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+								matchingGames = rangeElo(allColorGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
 							}
 							else if (tokens[1].equals("opelo")) {
-								matchingGames = rangeOpElo(matchingGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+								matchingGames = rangeOpElo(allColorGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
 							}
 							else if (tokens[1].equals("date")) {
 								SimpleDateFormat sdf = Game.getSdf();
 								Date low = sdf.parse(tokens[2]);
 								Date high = sdf.parse(tokens[3]);
-								matchingGames = rangeDate(matchingGames, low, high);
+								matchingGames = rangeDate(allColorGames, low, high);
 							}
 							else {
 								System.out.println("Failed to parse range command");
@@ -188,10 +193,10 @@ public class Analyze {
 								continue;
 							}
 							if (tokens[1].equals("opponent")) {
-								matchingGames = filterOp(matchingGames, tokens[2]);
+								matchingGames = filterOp(allColorGames, tokens[2]);
 							}
 							else if (tokens[1].equals("time")) {
-								matchingGames = filterTimeControl(matchingGames, tokens[2]);
+								matchingGames = filterTimeControl(allColorGames, tokens[2]);
 							}
 							else {
 								System.out.println("Failed to parse filter command");
@@ -214,14 +219,15 @@ public class Analyze {
 						continue;
 					}
 
-					if (!undo) {
-						matchingGames = findGamesMatchingBoard(matchingGames, board, positionFreqs.get(Zobrist.makeHash(board)));  // Gets the current amount of frequencies// Need to be keeping track the frequencies of this frikkin board too
+					if (!undo) {  // If it's undo, we aren't adding!
 						savedMatchingGamesLists.add(matchingGames);
+						int savedBoard[] = Arrays.copyOf(board, board.length);  // Need to preserve for undo
+						savedBoards.add(savedBoard);
 					}
 
 					beforeSearch = false;
 
-					System.out.println(getStats(matchingGames));
+					System.out.println(getStats(board, matchingGames));
 				}
 			}
 		}
@@ -360,7 +366,7 @@ public class Analyze {
 	}
 
 	// Presumably, we have already filtered for a hash, this could be optional
-	private static Statistics getStats(ArrayList<MatchingGame> matchingGames) { 
+	private static Statistics getStats(int board[], ArrayList<MatchingGame> matchingGames) { 
 
 		if (matchingGames == null) {
 			System.out.println("No games to give stats for!");
@@ -388,7 +394,7 @@ public class Analyze {
 					break;
 			}
 		}
-		return new Statistics(wins/totalGames, draws/totalGames, losses/totalGames, totalGames);
+		return new Statistics(board, wins/totalGames, draws/totalGames, losses/totalGames, totalGames);
 	}
 
 	/*Make filtering functions for:
@@ -414,12 +420,14 @@ public class Analyze {
 
 // Just really basic statistics right now.  Would be nice to display results over time, compare with various ELO's, etc, but for the moment we can just use filter
 class Statistics {
+	private int board[];
 	private double winPerc;
 	private double drawPerc;
 	private double lossPerc;
 	private int totalGames;
 
-	public Statistics(double winPerc, double drawPerc, double lossPerc, int totalGames) {
+	public Statistics(int board[], double winPerc, double drawPerc, double lossPerc, int totalGames) {
+		this.board = board;
 		this.winPerc = winPerc;
 		this.drawPerc = drawPerc;
 		this.lossPerc = lossPerc;
@@ -427,9 +435,9 @@ class Statistics {
 	}
 
 	public String toString() {
-
 		String output = "";
-		output += "Win Percentage:  "+String.format("%.2f", winPerc)+"\n";  // ^^ truncate to 1 decimal place ish
+		output += Game.boardToString(board,0); // Cheating with the hash right now^^
+		output += "Win Percentage:  "+String.format("%.2f", winPerc)+"\n"; 
 		output += "Draw Percentage: "+String.format("%.2f", drawPerc)+"\n";
 		output += "Loss Percentage: "+String.format("%.2f", lossPerc)+"\n";
 		output += "Total Games: "+totalGames+"\n";
