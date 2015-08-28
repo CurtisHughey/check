@@ -127,12 +127,12 @@ public class Analyze {
 
 				ArrayList<ArrayList<MatchingGame>> savedMatchingGamesLists = new ArrayList<ArrayList<MatchingGame>>();
 				savedMatchingGamesLists.add(allColorGames);
-				ArrayList<int[]> savedBoards = new ArrayList<int[]>();  // Might have to be Long^^^
-				savedBoards.add(startBoard);  //startBoard or board makes more sense? ^^^
+				ArrayList<int[]> savedBoards = new ArrayList<int[]>();  // Might have to be Integer^^^
+				int board[] = Arrays.copyOf(startBoard, startBoard.length);
+				savedBoards.add(Arrays.copyOf(startBoard, startBoard.length));
 
 				ArrayList<MatchingGame> matchingGames = new ArrayList<MatchingGame>();
 				matchingGames = allColorGames;
-				int board[] = startBoard;
 
 				boolean beforeSearch = true;
 
@@ -156,15 +156,18 @@ public class Analyze {
 							matchingGames = findGamesMatchingBoard(allColorGames, board, positionFreqs.get(Zobrist.makeHash(board)));
 						}
 						else if (tokens[0].equals("undo")) {
-							if (savedMatchingGamesLists.size() == 1) {
+							if (savedBoards.size() == 1) {
 								System.out.println("You cannot undo any further!");
 								continue;
 							}
 							undo = true;
+							positionFreqs.put(Zobrist.makeHash(board),positionFreqs.get(Zobrist.makeHash(board))-1);  // Might make it 0, is that bad?
 							savedMatchingGamesLists.remove(savedMatchingGamesLists.size()-1);  // Deletes the last one
 							matchingGames = savedMatchingGamesLists.get(savedMatchingGamesLists.size()-1);  // Loads the previous one
 							savedBoards.remove(savedBoards.size()-1);
-							board = savedBoards.get(savedBoards.size()-1);
+							int tempBoard[] = savedBoards.get(savedBoards.size()-1);
+							board = Arrays.copyOf(tempBoard, temp.length);
+							compressedPositions.remove(compressedPositions.size()-1);  //?^^
 						}
 						else if (tokens[0].equals("range")) {
 							if (!beforeSearch) {
