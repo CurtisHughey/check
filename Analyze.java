@@ -127,7 +127,7 @@ public class Analyze {
 
 				ArrayList<ArrayList<MatchingGame>> savedMatchingGamesLists = new ArrayList<ArrayList<MatchingGame>>();
 				savedMatchingGamesLists.add(allColorGames);
-				ArrayList<int[]> savedBoards = new ArrayList<int[]>();  // Might have to be Integer^^^
+				ArrayList<int[]> savedBoards = new ArrayList<int[]>();
 				int board[] = Arrays.copyOf(startBoard, startBoard.length);
 				savedBoards.add(Arrays.copyOf(startBoard, startBoard.length));
 
@@ -137,6 +137,13 @@ public class Analyze {
 				boolean beforeSearch = true;
 
 				while (true) {
+					System.out.println(Game.boardToString(board, 0));
+					Map<String, Statistics> movesStats = getStats(board, matchingGames);
+					System.out.println("Move     | Games  | Wins  | Draws | Losses |");
+					for (String move: movesStats.keySet()) {
+						System.out.println(String.format("%-9s|", move)+movesStats.get(move));
+					}
+
 					System.out.print("---------\nInput command: ");
 					String command = reader.nextLine();
 					String tokens[] = command.split(" ");  // Might be worth just moving this to regex ^^
@@ -166,8 +173,8 @@ public class Analyze {
 							matchingGames = savedMatchingGamesLists.get(savedMatchingGamesLists.size()-1);  // Loads the previous one
 							savedBoards.remove(savedBoards.size()-1);
 							int tempBoard[] = savedBoards.get(savedBoards.size()-1);
-							board = Arrays.copyOf(tempBoard, temp.length);
-							compressedPositions.remove(compressedPositions.size()-1);  //?^^
+							board = Arrays.copyOf(tempBoard, tempBoard.length);
+							compressedPositions.remove(compressedPositions.size()-1);  
 						}
 						else if (tokens[0].equals("range")) {
 							if (!beforeSearch) {
@@ -229,8 +236,6 @@ public class Analyze {
 					}
 
 					beforeSearch = false;
-
-					System.out.println(getStats(board, matchingGames));
 				}
 			}
 		}
@@ -369,7 +374,7 @@ public class Analyze {
 	}
 
 	// Presumably, we have already filtered for a hash, this could be optional
-	private static Statistics getStats(int board[], ArrayList<MatchingGame> matchingGames) { 
+	private static Map<String, Statistics> getStats(int board[], ArrayList<MatchingGame> matchingGames) { 
 
 		if (matchingGames == null) {
 			System.out.println("No games to give stats for!");
@@ -381,70 +386,77 @@ public class Analyze {
 		double losses = 0;
 		int totalGames = matchingGames.size();
 
+		Map<String, Statistics> movesStats = new HashMap<String, Statistics>();
+
 		for (MatchingGame matchingGame : matchingGames) {
-			Game game = matchingGame.getGame();  // I should also get the index eventually to display the next moves
+			Game game = matchingGame.getGame();
+			int index = matchingGame.getIndex();
+			String move = game.getMoves().get(index);
+			if (!movesStats.containsKey(move)) {
+				movesStats.put(move,new Statistics(0,0,0,0));
+			}
 			switch (game.getResult()) {
 				case WIN:
 					wins++;
+					movesStats.get(move).wins += 1;
 					break;
 				case DRAW:
 					draws++;
+					movesStats.get(move).draws += 1;
 					break;
 				case LOSS:
 					losses++;
+					movesStats.get(move).losses += 1;
 					break;
 				default:
 					break;
 			}
+			movesStats.get(move).totalGames += 1;
 		}
-		return new Statistics(board, wins/totalGames, draws/totalGames, losses/totalGames, totalGames);
+		for (String move : movesStats.keySet()) {
+			movesStats.get(move).update();  // Recalculating the percentages
+		}
+		return movesStats;
 	}
-
-	/*Make filtering functions for:
-		Won/Lost/Drawn games
-		Date ranges
-		White/Black
-		Self and opponent ELO's.
-		Time control
-		Other?
-
-	example raw data to filter on
-	[Event "Live Chess"]
-	[Site "Chess.com"]
-	[Date "2015.06.28"]
-	[White "TheBlazedAssassin"]
-	[Black "chughey"]
-	[Result "1-0"]
-	[WhiteElo "2025"]
-	[BlackElo "2053"]
-	[TimeControl "1|0"]
-	[Termination "TheBlazedAssassin won by checkmate"]*/
 }
 
 // Just really basic statistics right now.  Would be nice to display results over time, compare with various ELO's, etc, but for the moment we can just use filter
 class Statistics {
-	private int board[];
+	public int wins;
+	public int draws;
+	public int losses;
+	public int totalGames;
 	private double winPerc;
 	private double drawPerc;
 	private double lossPerc;
-	private int totalGames;
 
-	public Statistics(int board[], double winPerc, double drawPerc, double lossPerc, int totalGames) {
-		this.board = board;
-		this.winPerc = winPerc;
-		this.drawPerc = drawPerc;
-		this.lossPerc = lossPerc;
-		this.totalGames = totalGames;
+	public Statistics(int wins, int draws, int losses, int totalGames) {
+		this.wins = wins;
+		this.draws = draws;
+		this.losses = losses;
+		update();
+	}
+
+	public void update() {
+		if (totalGames == 0) {
+			winPerc = 0;
+			drawPerc = 0;
+			lossPerc = 0;
+		}
+		else {
+			this.winPerc = ((double)wins)/totalGames;
+			this.drawPerc = ((double)draws)/totalGames;
+			this.lossPerc = ((double)losses)/totalGames;
+			this.totalGames = totalGames;		
+		}
 	}
 
 	public String toString() {
-		String output = "";
-		output += Game.boardToString(board,0); // Cheating with the hash right now^^
-		output += "Win Percentage:  "+String.format("%.2f", winPerc)+"\n"; 
-		output += "Draw Percentage: "+String.format("%.2f", drawPerc)+"\n";
-		output += "Loss Percentage: "+String.format("%.2f", lossPerc)+"\n";
-		output += "Total Games: "+totalGames+"\n";
-
+		String output = " ";
+		output += String.format("%-7s| ", totalGames);
+		output += String.format("%-6s| ", (int)(100*winPerc)+"%"); 
+		output += String.format("%-6s| ", (int)(100*drawPerc)+"%");
+		output += String.format("%-7s| ", (int)(100*lossPerc)+"%");
 		return output;
 	}
 }
