@@ -141,7 +141,7 @@ public class Analyze {
 
 				while (true) {
 					System.out.println(Game.boardToString(board, 0));
-					Map<String, Statistics> movesStats = getStats(board, matchingGames);
+					HashMap<String, Statistics> movesStats = getStats(board, matchingGames, allFilteredGames);
 					System.out.println("Move     | Games  | Wins  | Draws | Losses |");
 					for (String move: movesStats.keySet()) {
 						System.out.println(String.format("%-9s|", move)+movesStats.get(move));
@@ -160,7 +160,7 @@ public class Analyze {
 							break;
 						}
 						else if (tokens[0].equals("move")) {
-							Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]);
+							Game.makeMove(board, compressedPositions, positionFreqs, tokens[1], true);
 							matchingGames = findGamesMatchingBoard(allFilteredGames, board, positionFreqs.get(Zobrist.makeHash(board)));
 							savedMatchingGamesLists.add(matchingGames);
 							int savedBoard[] = Arrays.copyOf(board, board.length);  // Need to preserve for undo
@@ -248,19 +248,18 @@ public class Analyze {
 	}
 
 	private static ArrayList<MatchingGame> findGamesMatchingBoard(ArrayList<MatchingGame> currentMatchingGames, int[] board, Integer freq) {
-		return findGamesMatchingCompressedPosition(currentMatchingGames, Zobrist.makeHash(board), freq);  // This will need to get updated if I want to not have to take care of repeated positions in makeHash
-	}
-
-	private static ArrayList<MatchingGame> findGamesMatchingCompressedPosition(ArrayList<MatchingGame> currentMatchingGames, long hash, Integer freq) {
 		if (freq == null) {
 			return null;
 		}
+		return findGamesMatchingCompressedPosition(currentMatchingGames, new CompressedPosition(Zobrist.makeHash(board), freq));  // This will need to get updated if I want to not have to take care of repeated positions in makeHash
+	}
+
+	private static ArrayList<MatchingGame> findGamesMatchingCompressedPosition(ArrayList<MatchingGame> currentMatchingGames, CompressedPosition compressedPosition) {
 		ArrayList<MatchingGame> newMatchingGames = new ArrayList<MatchingGame>();
-		CompressedPosition CompressedPosition = new CompressedPosition(hash, freq);
 		for (MatchingGame currentMatchingGame : currentMatchingGames) {
 			Game game = currentMatchingGame.getGame();
 			int moveIndex = -1;
-			if ((moveIndex = game.compressedPositions.indexOf(CompressedPosition)) >= 0)  {
+			if ((moveIndex = game.compressedPositions.indexOf(compressedPosition)) >= 0)  {
 				newMatchingGames.add(new MatchingGame(game, moveIndex));
 			}
 		}
@@ -363,7 +362,7 @@ public class Analyze {
 	}
 
 	// Presumably, we have already filtered for a hash, this could be optional
-	private static Map<String, Statistics> getStats(int board[], ArrayList<MatchingGame> matchingGames) { 
+	private static HashMap<String, Statistics> getStats(final int board[], ArrayList<MatchingGame> matchingGames, ArrayList<MatchingGame> allFilteredGames) {
 
 		if (matchingGames == null) {
 			System.out.println("No games to give stats for!");
@@ -375,34 +374,53 @@ public class Analyze {
 		double losses = 0;
 		int totalGames = matchingGames.size();
 
-		Map<String, Statistics> movesStats = new HashMap<String, Statistics>();
+		HashMap<String, CompressedPosition> moveCompressedPositions = new HashMap<String, CompressedPosition>();
 
 		for (MatchingGame matchingGame : matchingGames) {
 			Game game = matchingGame.getGame();
-			int index = matchingGame.getIndex();
-			String move = game.getMoves().get(index);
-			if (!movesStats.containsKey(move)) {
-				movesStats.put(move,new Statistics(0,0,0,0));
+			int moveIndex = matchingGame.getMoveIndex();
+			int compressedIndex = matchingGame.getCompressedIndex();
+			if (game.getCompressedPositions().size() == compressedIndex) {
+				continue;  // Ignore if last game
 			}
-			switch (game.getResult()) {
-				case WIN:
-					wins++;
-					movesStats.get(move).wins += 1;
-					break;
-				case DRAW:
-					draws++;
-					movesStats.get(move).draws += 1;
-					break;
-				case LOSS:
-					losses++;
-					movesStats.get(move).losses += 1;
-					break;
-				default:
-					break;
+
+			String move = game.getMoves().get(moveIndex);
+			CompressedPosition compressedPosition = game.getCompressedPositions().get(compressedIndex);
+			if (!moveCompressedPositions.containsKey(move)) {
+				moveCompressedPositions.put(move,compressedPosition);
 			}
-			movesStats.get(move).totalGames += 1;
 		}
-		for (String move : movesStats.keySet()) {
+
+		HashMap<String, Statistics> movesStats = new HashMap<String, Statistics>();
+
+		for (String move : moveCompressedPositions.keySet()) {
+			//long boardCopy[] = Arrays.copyOf(board, board.length);
+			//boardCopy = makeMove(boardCopy, allCompressedPositions, positionFreqs, move, false);  // We don't want to change compressedPositions and positionFreqs!
+			ArrayList<MatchingGame> moveMatchingGames = findGamesMatchingCompressedPosition(allFilteredGames, moveCompressedPositions.get(move));
+
+			if (!movesStats.containsKey(move)) {
+				movesStats.put(move, new Statistics(0,0,0,0));
+			}
+
+			for (MatchingGame moveMatchingGame : moveMatchingGames) {
+				Game game = moveMatchingGame.getGame();
+
+				switch (game.getResult()) {
+					case WIN:
+						movesStats.get(move).wins += 1;  // Repeating this a lot, move the access to outside the loop
+						break;
+					case DRAW:
+						movesStats.get(move).draws += 1;
+						break;
+					case LOSS:
+						movesStats.get(move).losses += 1;
+						break;
+					default:
+						break;
+				}
+				movesStats.get(move).totalGames += 1;
+			}
+
 			movesStats.get(move).update();  // Recalculating the percentages
 		}
 		return movesStats;
@@ -452,13 +470,16 @@ class Statistics {
 
 class MatchingGame {  // A game that matches to a specific CompressedPosition
 	final private Game game;
-	final private int index; // The index of the move that matches;
+	final private int moveIndex; // The index of the move that matches.
+	final private int compressedIndex;
 
-	public MatchingGame(Game game, int index) {
+	public MatchingGame(Game game, int moveIndex) {
 		this.game = game;
-		this.index = index;
+		this.moveIndex = moveIndex;
+		this.compressedIndex = moveIndex + 1;
 	}
 
 	public Game getGame() { return game; }
-	public int getIndex() { return index; }
+	public int getMoveIndex() { return moveIndex; }
+	public int getCompressedIndex() { return compressedIndex; }
 }

@@ -178,7 +178,7 @@ public class Game {
 		//Potentially, checking for draws by repetition might be unnecessary, since if I only look in the first 15 or so moves it is highly unlikely that that would be present
 
 		for (String move : moves) {
-			makeMove(board, compressedPositions, positionFreqs, move);
+			makeMove(board, compressedPositions, positionFreqs, move, true);
 						
 			////
 			long tempHash = Zobrist.makeHash(board);
@@ -284,7 +284,25 @@ public class Game {
 	}
 
 	// move = 0 if white, 1 if black
-	public static void makeMove(int board[], ArrayList<CompressedPosition> compressedPositions, HashMap<Long, Integer> positionFreqs, String move) {
+	// update basically means we only want the board back and don't anticipate making more moves from the returned board (i.e. positionFreqs and compressedPositions shouldn't be updated)
+	public static void makeMove(int board[], ArrayList<CompressedPosition> compressedPositions, HashMap<Long, Integer> positionFreqs, String move, boolean update) {
+		long hash = _makeMove(board, compressedPositions.get(compressedPositions.size()-1).getHash(), move);
+
+		if (update) {
+			Integer freq = positionFreqs.get(hash);
+			if (freq != null) {
+				compressedPositions.add(new CompressedPosition(hash, freq+1));
+				positionFreqs.put(hash, freq+1);
+			}
+			else {
+				compressedPositions.add(new CompressedPosition(hash, 1));
+				positionFreqs.put(hash, 1);
+			}
+		}
+	}
+
+	// Changes the board, returns hash
+	private static long _makeMove(int board[], long hash, String move) {
 
 		String pawn_regex = "(([a-h])?x?([a-h])([1-8])(=([RNBQ]))?)"; // For pawn moves
 		String other_regex = "(([RNBKQ])(([a-h])|([1-8]))?x?([a-h])([1-8]))"; // For other normal piece moves 
@@ -309,7 +327,6 @@ public class Game {
 		boolean queenCastle = false;
 
 		int turn = board[8];
-		long hash = compressedPositions.get(compressedPositions.size()-1).getHash();  // Bit wonky, should really be called currentHash or something
 
 		/*
 		0: move
@@ -422,15 +439,7 @@ public class Game {
 		board[8] = turn==0 ? 1 : 0;  // Toggles
 		hash ^= Zobrist.zobristTable[0][8+board[8]]; // The special turn hashed position
 
-		Integer freq = positionFreqs.get(hash);
-		if (freq != null) {
-			compressedPositions.add(new CompressedPosition(hash, freq+1));
-			positionFreqs.put(hash, freq+1);
-		}
-		else {
-			compressedPositions.add(new CompressedPosition(hash, 1));
-			positionFreqs.put(hash, 1);
-		}
+		return hash;
 	}
 
 	public static String boardToString(int[] board, long hash) {
