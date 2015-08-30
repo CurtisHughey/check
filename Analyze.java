@@ -134,6 +134,9 @@ public class Analyze {
 				ArrayList<MatchingGame> matchingGames = new ArrayList<MatchingGame>();
 				matchingGames = allColorGames;
 
+				ArrayList<MatchingGame> allFilteredGames = new ArrayList<MatchingGame>();
+				allFilteredGames = allColorGames;
+
 				boolean beforeSearch = true;
 
 				while (true) {
@@ -148,8 +151,6 @@ public class Analyze {
 					String command = reader.nextLine();
 					String tokens[] = command.split(" ");  // Might be worth just moving this to regex ^^
 
-					boolean undo = false;
-
 					try {
 						if (tokens[0].equals("end")) {
 							break; // Pops out of this loop and goes to new search at top of outer loop
@@ -160,14 +161,17 @@ public class Analyze {
 						}
 						else if (tokens[0].equals("move")) {
 							Game.makeMove(board, compressedPositions, positionFreqs, tokens[1]);
-							matchingGames = findGamesMatchingBoard(allColorGames, board, positionFreqs.get(Zobrist.makeHash(board)));
+							matchingGames = findGamesMatchingBoard(allFilteredGames, board, positionFreqs.get(Zobrist.makeHash(board)));
+							savedMatchingGamesLists.add(matchingGames);
+							int savedBoard[] = Arrays.copyOf(board, board.length);  // Need to preserve for undo
+							savedBoards.add(savedBoard);		
+							beforeSearch = false;				
 						}
 						else if (tokens[0].equals("undo")) {
 							if (savedBoards.size() == 1) {
 								System.out.println("You cannot undo any further!");
 								continue;
 							}
-							undo = true;
 							positionFreqs.put(Zobrist.makeHash(board),positionFreqs.get(Zobrist.makeHash(board))-1);  // Might make it 0, is that bad?
 							savedMatchingGamesLists.remove(savedMatchingGamesLists.size()-1);  // Deletes the last one
 							matchingGames = savedMatchingGamesLists.get(savedMatchingGamesLists.size()-1);  // Loads the previous one
@@ -176,42 +180,35 @@ public class Analyze {
 							board = Arrays.copyOf(tempBoard, tempBoard.length);
 							compressedPositions.remove(compressedPositions.size()-1);  
 						}
-						else if (tokens[0].equals("range")) {
-							if (!beforeSearch) {
-								System.out.println("You cannot execute a range command now!");
-							}
-							if (tokens[1].equals("elo")) {
-								matchingGames = rangeElo(allColorGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
-							}
-							else if (tokens[1].equals("opelo")) {
-								matchingGames = rangeOpElo(allColorGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
-							}
-							else if (tokens[1].equals("date")) {
-								SimpleDateFormat sdf = Game.getSdf();
-								Date low = sdf.parse(tokens[2]);
-								Date high = sdf.parse(tokens[3]);
-								matchingGames = rangeDate(allColorGames, low, high);
-							}
-							else {
-								System.out.println("Failed to parse range command");
-								continue;
-							}
-						}
 						else if (tokens[0].equals("filter")) {
 							if (!beforeSearch) {
 								System.out.println("You cannot execute a filter command now!");
 								continue;
 							}
 							if (tokens[1].equals("opponent")) {
-								matchingGames = filterOp(allColorGames, tokens[2]);
+								allFilteredGames = filterOp(matchingGames, tokens[2]);
 							}
 							else if (tokens[1].equals("time")) {
-								matchingGames = filterTimeControl(allColorGames, tokens[2]);
+								allFilteredGames = filterTimeControl(matchingGames, tokens[2]);
+							}
+							else if (tokens[1].equals("elo")) {
+								allFilteredGames = rangeElo(matchingGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+							}
+							else if (tokens[1].equals("opelo")) {
+								allFilteredGames = rangeOpElo(matchingGames, Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3]));
+							}
+							else if (tokens[1].equals("date")) {
+								SimpleDateFormat sdf = Game.getSdf();
+								Date low = sdf.parse(tokens[2]);
+								Date high = sdf.parse(tokens[3]);
+								allFilteredGames = rangeDate(allColorGames, low, high);
 							}
 							else {
 								System.out.println("Failed to parse filter command");
 								continue;
 							}
+							savedMatchingGamesLists.set(0, allFilteredGames);  // Resetting all the games
+							matchingGames = allFilteredGames;
 						}
 						else {
 							System.out.println("Command not recognized, please try again");
@@ -228,14 +225,6 @@ public class Analyze {
 						System.out.println("No games found!");
 						continue;
 					}
-
-					if (!undo) {  // If it's undo, we aren't adding!
-						savedMatchingGamesLists.add(matchingGames);
-						int savedBoard[] = Arrays.copyOf(board, board.length);  // Need to preserve for undo
-						savedBoards.add(savedBoard);
-					}
-
-					beforeSearch = false;
 				}
 			}
 		}
@@ -255,7 +244,7 @@ public class Analyze {
 		System.out.println("undo: undoes the prior move\n");
 		System.out.println("quit: exits the program\n");
 		System.out.println("help: displays this guide\n");
-		System.out.println("Note that range and filter commands can only be issued at the start of a\nsearch (i.e. before you start entering moves\n");
+		System.out.println("Note that range and filter commands can only be issued at the start of a\nsearch (i.e. before you start entering moves)\n");
 	}
 
 	private static ArrayList<MatchingGame> findGamesMatchingBoard(ArrayList<MatchingGame> currentMatchingGames, int[] board, Integer freq) {
